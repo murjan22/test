@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Button, Table, Modal } from "react-bootstrap";
+import { Button, Table } from "react-bootstrap";
 import Lightbox from "yet-another-react-lightbox";
 import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen";
 import Slideshow from "yet-another-react-lightbox/plugins/slideshow";
 import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
+import "yet-another-react-lightbox/styles.css";
 import "./Documents.css";
 
 type attachmentsMode = {
@@ -22,16 +23,20 @@ type dataModel = {
   endDate: string;
   attachments: attachmentsMode[];
 };
+
+type slideType = {
+  src: string;
+  type: 'image' | 'pdf';
+  name?: string;
+};
+
 type props = {
   data: dataModel[];
 };
 
 function Documents({ data }: props) {
   const [openLightBox, setOpenLightBox] = useState(false);
-  const [openPdfModal, setOpenPdfModal] = useState(false);
-  const [slides, setSlides] = useState<{ src: string }[]>([]);
-  const [currentPdfUrl, setCurrentPdfUrl] = useState<string>("");
-  const [currentPdfName, setCurrentPdfName] = useState<string>("");
+  const [slides, setSlides] = useState<slideType[]>([]);
 
   // Helper function to check if file is PDF
   const isPdfFile = (url: string): boolean => {
@@ -46,36 +51,26 @@ function Documents({ data }: props) {
 
   const handleOpenLightBox = (attachments?: attachmentsMode[]) => {
     if (attachments && attachments.length > 0) {
-      // Separate images and PDFs
-      const imageAttachments = attachments.filter(attachment => 
-        isImageFile(attachment.url)
-      );
-      const pdfAttachments = attachments.filter(attachment => 
-        isPdfFile(attachment.url)
-      );
+      const slideData = attachments.map((attachment) => {
+        if (isPdfFile(attachment.url)) {
+          return {
+            src: attachment.url,
+            type: 'pdf' as const,
+            name: attachment.name
+          };
+        } else if (isImageFile(attachment.url)) {
+          return {
+            src: attachment.url,
+            type: 'image' as const,
+            name: attachment.name
+          };
+        }
+        return null;
+      }).filter((slide): slide is slideType => slide !== null);
 
-      // If there are images, show them in lightbox
-      if (imageAttachments.length > 0) {
-        const slideImages = imageAttachments.map((img) => ({
-          src: img.url,
-        }));
-        setSlides(slideImages);
-        setOpenLightBox(true);
-      }
-
-      // If there are PDFs, show the first one in PDF modal
-      if (pdfAttachments.length > 0) {
-        setCurrentPdfUrl(pdfAttachments[0].url);
-        setCurrentPdfName(pdfAttachments[0].name);
-        setOpenPdfModal(true);
-      }
+      setSlides(slideData);
+      setOpenLightBox(true);
     }
-  };
-
-  const handlePdfClose = () => {
-    setOpenPdfModal(false);
-    setCurrentPdfUrl("");
-    setCurrentPdfName("");
   };
 
   return (
@@ -125,7 +120,7 @@ function Documents({ data }: props) {
         </tbody>
       </Table>
 
-      {/* Lightbox for images */}
+      {/* Lightbox for both images and PDFs */}
       <Lightbox
         open={openLightBox}
         close={() => setOpenLightBox(false)}
@@ -135,31 +130,99 @@ function Documents({ data }: props) {
           scrollToZoom: true,
         }}
         slides={slides}
+        render={{
+          slide: ({ slide, offset, rect }) => {
+            if (slide.type === 'pdf') {
+              return (
+                <div
+                  style={{
+                    width: rect.width,
+                    height: rect.height,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#f8f9fa',
+                    position: 'relative'
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#e9ecef',
+                        borderBottom: '1px solid #dee2e6',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: '#495057'
+                      }}
+                    >
+                      {slide.name || 'PDF Document'}
+                    </div>
+                    <iframe
+                      src={slide.src}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        flex: 1
+                      }}
+                      title={slide.name || 'PDF Document'}
+                    />
+                  </div>
+                </div>
+              );
+            }
+            // For images, use default rendering
+            return undefined;
+          },
+          thumbnail: ({ slide, rect, render }) => {
+            if (slide.type === 'pdf') {
+              return (
+                <div
+                  style={{
+                    width: rect.width,
+                    height: rect.height,
+                    backgroundColor: '#f8f9fa',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid #dee2e6',
+                    borderRadius: '4px',
+                    position: 'relative'
+                  }}
+                >
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      color: '#6c757d'
+                    }}
+                  >
+                    <i 
+                      className="bi bi-file-pdf" 
+                      style={{ 
+                        fontSize: '24px', 
+                        marginBottom: '4px',
+                        display: 'block'
+                      }}
+                    ></i>
+                    <div style={{ fontSize: '10px', wordBreak: 'break-word' }}>
+                      {slide.name || 'PDF'}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return undefined;
+          }
+        }}
       />
-
-      {/* Modal for PDFs */}
-      <Modal
-        show={openPdfModal}
-        onHide={handlePdfClose}
-        size="xl"
-        centered
-        className="pdf-modal"
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>{currentPdfName}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body style={{ padding: 0, height: "80vh" }}>
-          {currentPdfUrl && (
-            <iframe
-              src={currentPdfUrl}
-              width="100%"
-              height="100%"
-              style={{ border: "none" }}
-              title={currentPdfName}
-            />
-          )}
-        </Modal.Body>
-      </Modal>
     </div>
   );
 }
